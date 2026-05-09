@@ -22,3 +22,20 @@ logs = []
 def raiz():
     return {"status": "online","mensagem": "API de log no ar!"}
 
+
+@app.post ("/logs")
+def registrar_logs(log:LogAcesso):
+    novo_log = {
+        "id" : len(logs) + 1,
+        "usuario": log.usuario,
+        "acao": log.acao,
+        "ip": log.ip,
+        "sucesso": log.sucesso,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    logs.append(novo_log)
+    return {"mensagem": "Log registrado!", "log": novo_log}
+@app.get("/logs")
+def listar_logs():
+    return {"total": len(logs), "logs":logs}
