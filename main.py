@@ -1,22 +1,35 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from sqlmodel import Field, Session, SQLModel, create_engine, select
+
 from datetime import datetime
+from typing import Optional
 
 
-app  = FastAPI(
-    title = "API de logs de acesso",
-    description= "Registra e consulta eventos de acesso ao sistema",
-    version= "0.2.0"
-)
+engine = create_engine("sqlite:///logs.db")
 
 
-class LogAcesso (BaseModel):
+class LogAcesso (SQLModel, table=True):
+    id: Optional[int] = Field(default= None, primary_key=True)
     usuario:str
     acao:str
     ip:str
     sucesso:bool
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat()) 
 
-logs = []
+def criar_tabelas():
+    SQLModel.metadata.create_all(engine)
+
+app  = FastAPI(
+    title = "API de logs de acesso",
+    description= "Registra e consulta eventos de acesso ao sistema",
+    version= "0.3.0"
+)
+
+def on_startup():
+    criar_tabelas()
+
+
+#logs = []
 
 @app.get("/")
 def raiz():
@@ -25,17 +38,24 @@ def raiz():
 
 @app.post ("/logs")
 def registrar_logs(log:LogAcesso):
-    novo_log = {
-        "id" : len(logs) + 1,
-        "usuario": log.usuario,
-        "acao": log.acao,
-        "ip": log.ip,
-        "sucesso": log.sucesso,
-        "timestamp": datetime.now().isoformat(),
-    }
+    with Session(engine) as session:
+        session.add(log)
+        session.commit()
+        session.refresh(log)
+        return {"mensagem": "Log Registrado", "log":log}    
 
-    logs.append(novo_log)
-    return {"mensagem": "Log registrado!", "log": novo_log}
+
 @app.get("/logs")
 def listar_logs():
-    return {"total": len(logs), "logs":logs}
+    with Session(engine) as session:
+        logs = session.exec(select(LogAcesso)).all()
+        return {"Total": len(logs),"logs":logs}
+
+
+@app.get("/logs/{log_id}")
+def buscar_log(log_id:int):
+    with Session(engine) as session:
+        log = session.get(LogAcesso, log_id)
+        if not log:
+            raise HTTPException(status_code=404, detail=f"Log {log_id} não encontrado")
+        return log
